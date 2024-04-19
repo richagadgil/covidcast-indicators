@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 import requests
 
+from itertools import product
+
 # Columns to drop the the data frame.
 DROP_COLUMNS = [
     "countyfips",
@@ -169,11 +171,31 @@ def pull_usafacts_data(base_url: str, metric: str, logger: Logger, cache: str=No
     min_timestamp = min(unique_days)
     max_timestamp = max(unique_days)
     n_days = (max_timestamp - min_timestamp) / np.timedelta64(1, "D") + 1
+
+    ################### FIX ###################
+    missing_dates = list(set(np.arange(min_timestamp, max_timestamp + np.timedelta64(1, 'D'), step=np.timedelta64(1, 'D'), dtype='datetime64[ns]')) ^ set(unique_days))
+    if len(missing_dates) > 0:
+        padding = pd.DataFrame(list(product(df['fips'].unique(), missing_dates, [np.nan], [np.nan])), columns=['fips', 'timestamp', 'cumulative_counts', 'new_counts'])
+        df = pd.concat([df, padding], ignore_index=True).sort_values(['fips', 'timestamp'])
+    ################### FIX ###################
+
+    unique_days = df["timestamp"].unique()
+
     if n_days != len(unique_days):
+
+        # RANGE OF MISSING DATES
+        error_message = ""
+
+        df['date_diff'] = df['timestamp'].diff().dt.days
+
+        for index, row in df[(df['date_diff'] > 0) & (df['date_diff'] != 1)][['timestamp', 'date_diff']].sort_values('date_diff').drop_duplicates().iterrows():
+            error_message += f"({(row['timestamp'] - np.timedelta64(int(row['date_diff']), 'D')).strftime('%Y-%m-%d')}, {row['timestamp'].strftime('%Y-%m-%d')})"
+
         raise ValueError(
             f"Not every day between {min_timestamp} and "
-            "{max_timestamp} is represented."
+            f"{max_timestamp} is represented. Missing ranges: {error_message}"
         )
+
     return df.loc[
         df["timestamp"] >= min_ts,
         [  # Reorder
@@ -183,3 +205,4 @@ def pull_usafacts_data(base_url: str, metric: str, logger: Logger, cache: str=No
             "cumulative_counts",
         ],
     ]
+
