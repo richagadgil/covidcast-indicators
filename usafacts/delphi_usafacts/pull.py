@@ -177,6 +177,7 @@ def pull_usafacts_data(base_url: str, metric: str, logger: Logger, cache: str=No
     if len(missing_dates) > 0:
         padding = pd.DataFrame(list(product(df['fips'].unique(), missing_dates, [np.nan], [np.nan])), columns=['fips', 'timestamp', 'cumulative_counts', 'new_counts'])
         df = pd.concat([df, padding], ignore_index=True).sort_values(['fips', 'timestamp'])
+        assert df[df['timestamp'].isin(missing_dates)][['cumulative_counts', 'new_counts']].isna().all().all() == True
     ################### FIX ###################
 
     unique_days = df["timestamp"].unique()
